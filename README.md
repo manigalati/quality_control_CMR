@@ -29,4 +29,4 @@ Copyright 2020 Eurecom.
 
 This software is released under the BSD-3 license. Please see the license file_ for details.
 
-[ACDC dataset]: https://www.creatis.insa-lyon.fr/Challenge/acdc
+[ACDC Challenge]: https://www.creatis.insa-lyon.fr/Challenge/acdc
