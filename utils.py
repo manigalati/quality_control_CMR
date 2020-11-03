@@ -1,3 +1,9 @@
+import os
+import numpy as np
+from PIL import Image
+import nibabel as nib
+from medpy.metric import binary
+
 def resize_image_by_padding(image, new_shape, pad_value=None):
     shape = tuple(list(image.shape))
     new_shape = tuple(np.max(np.concatenate((shape, new_shape)).reshape((2, len(shape))), axis=0))
@@ -53,3 +59,61 @@ def get_gt(src):
           img=center_crop_2D_image(img,(256,256))
         gt["ES"].append((patient,img))
   return gt
+  
+def get_test(src):
+  test={"ED":[],"ES":[]}
+  for scan in os.listdir(src):
+    if(scan.endswith("_ED.nii.gz")):
+      patient=scan.split("_ED.nii.gz")[0]
+      scan=nib.load(src+scan)
+      scan=scan.get_fdata().transpose(2,0,1)
+      for img in scan:
+        img=img.astype(int)
+        img=resize_image_by_padding(img,(256,256))
+        if(any(np.array(img.shape)>256)):
+          img=center_crop_2D_image(img,(256,256))
+        test["ED"].append((patient,img))
+    elif(scan.endswith("_ES.nii.gz")):
+      patient=scan.split("_ES.nii.gz")[0]
+      scan=nib.load(src+scan)
+      scan=scan.get_fdata().transpose(2,0,1)
+      for img in scan:
+        img=img.astype(int)
+        img=resize_image_by_padding(img,(256,256))
+        if(any(np.array(img.shape)>256)):
+          img=center_crop_2D_image(img,(256,256))
+        test["ES"].append((patient,img))
+  return test
+  
+def get_results(prediction,reference):
+  results={}
+  for c,key in enumerate(["","RV_","MYO_","LV_"]):
+    ref=np.copy(reference)
+    pred=np.copy(prediction)
+
+    ref=ref if c==0 else np.where(ref!=c,0,ref)
+    pred=pred if c==0 else np.where(np.rint(pred)!=c,0,pred)
+    
+    results[key+"SED"]=np.sum((ref-pred)**2)
+    results[key+"SED_rint"]=np.sum((ref-np.rint(pred))**2)
+    results[key+"maxSED"]=np.sum(((ref-pred)**2).reshape(ref.shape[0],-1),axis=1).max()
+    results[key+"maxSED_rint"]=np.sum(((ref-np.rint(pred))**2).reshape(ref.shape[0],-1),axis=1).max()
+    results[key+"Dice"]=2*np.sum(pred*np.where(ref!=0,1,0))/np.sum(pred+np.where(ref!=0,1,0)) if np.sum(pred+np.where(ref!=0,1,0))!=0 else 0
+    results[key+"Dice_rint"]=binary.dc(np.where(ref!=0,1,0),np.where(np.rint(pred)!=0,1,0))
+    try:
+      results[key+"HD_rint"]=binary.hd(np.where(ref!=0,1,0),np.where(np.rint(pred)!=0,1,0))
+    except Exception:
+      results[key+"HD_rint"]=np.nan
+  return results
+  
+def display_image(img):
+  img=np.rint(img)
+  img=np.rint(img/3*255)
+  display(Image.fromarray(img.astype(np.uint8)))
+
+def display_difference(prediction,reference):
+  difference=np.zeros([256,256,3])
+  difference=np.zeros([256,256,3])
+  difference[np.rint(prediction)!=np.rint(reference)]=[240,52,52]
+  difference[np.rint(prediction)==np.rint(reference)]=(np.abs(prediction-reference)[np.rint(prediction)==np.rint(reference)]*np.array([[240,52,52]]).T).T
+  display(Image.fromarray(difference.astype(np.uint8)))

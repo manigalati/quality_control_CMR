@@ -1,3 +1,10 @@
+import torch
+import torch.nn as nn
+import matplotlib.pyplot as plt
+
+#use gpu if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class Losses():
   def __init__(self):
     self.MSELoss=nn.MSELoss()
