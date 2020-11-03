@@ -22,6 +22,7 @@ If you use this software, please cite the following paper as appropriate:
 ## Running the Software
 
 All the python classes and functions strictly needed to implement the framework can be found in `CA.py`.
+
 We demonstrate its effectiveness by reproducing the results of the [ACDC Challenge] in `Model_Monitoring_for_Cardiac_Image_Segmentation.ipynb`, in the absence of ground truth.
 
 ## Copyright and licensing
