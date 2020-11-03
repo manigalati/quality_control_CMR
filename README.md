@@ -2,9 +2,7 @@
 
 Scripts and utility programs for implementing our framework.
 
-Author: Francesco Galati.
-
-Additional contributions: Maria A. Zuluaga.
+Authors: Francesco Galati, Maria A. Zuluaga.
 
 ## How to cite
 
