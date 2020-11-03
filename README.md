@@ -1,4 +1,4 @@
-# USAD
+# EFFICIENT MODEL MONITORING FOR QUALITY CONTROL IN CARDIAC IMAGE SEGMENTATION
 
 Scripts and utility programs for implementing the USAD architecture.
 
