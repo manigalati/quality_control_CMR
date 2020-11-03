@@ -1,4 +1,4 @@
-# EFFICIENT MODEL MONITORING FOR QUALITY CONTROL IN CARDIAC IMAGE SEGMENTATION
+# Efficient model monitoring for quality control in cardiac image segmentation
 
 Scripts and utility programs for implementing the USAD architecture.
 
