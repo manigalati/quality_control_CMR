@@ -20,7 +20,7 @@ If you use this software, please cite the following paper as appropriate:
 ## Running the Software
 
 All the python classes and functions strictly needed to implement the framework can be found in `CA.py`.
-An example of a realistic application deployed with the [ACDC dataset] is included in `USAD.ipynb`.
+An example of a realistic application deployed with the [ACDC dataset] is included in `Model_Monitoring_for_Cardiac_Image_Segmentation.ipynb`.
 
 ## Copyright and licensing
 
