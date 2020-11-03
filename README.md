@@ -16,11 +16,13 @@ If you use this software, please cite the following paper as appropriate:
 ## Requirements
  * PyTorch 1.6.0
  * CUDA 10.1 (to allow use of GPU, not compulsory)
+ * nibabel 
+ * medpy
 
 ## Running the Software
 
 All the python classes and functions strictly needed to implement the framework can be found in `CA.py`.
-An example of a realistic application deployed with the [ACDC dataset] is included in `Model_Monitoring_for_Cardiac_Image_Segmentation.ipynb`.
+We demonstrate its effectiveness by reproducing the results of the [ACDC Challenge] in `Model_Monitoring_for_Cardiac_Image_Segmentation.ipynb`, in the absence of ground truth.
 
 ## Copyright and licensing
 
