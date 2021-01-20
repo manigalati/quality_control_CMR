@@ -1,3 +1,5 @@
+import os
+import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -215,7 +217,7 @@ class AE(nn.Module):
       #loss terms
       for batch in patient:
         batch={"gt":batch.to(device)}
-        batch["reconstruction"]=ae.forward(batch["gt"])
+        batch["reconstruction"]=self.forward(batch["gt"])
         gt=torch.cat([gt,batch["gt"]],dim=0) if len(gt)>0 else batch["gt"]
         reconstruction=torch.cat([reconstruction,batch["reconstruction"]],dim=0) if len(reconstruction)>0 else batch["reconstruction"]
         for k,v in self.loss_function(batch["reconstruction"],batch["gt"],validation=True).items():

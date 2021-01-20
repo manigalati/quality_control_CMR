@@ -1,8 +1,19 @@
 import os
 import numpy as np
-from PIL import Image
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 import nibabel as nib
+import torch
+import torchvision
+
+from PIL import Image
 from medpy.metric import binary
+from skimage.transform import resize
+from scipy import stats
+
+#use gpu if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ####################
 ##Data preparation##
