@@ -5,36 +5,14 @@ import matplotlib.pyplot as plt
 #use gpu if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class Losses():
-  def __init__(self):
-    self.MSELoss=nn.MSELoss()
-
-  def GDLoss(self,reconstruction,batch):
-    intersection=torch.sum(reconstruction*batch,dim=(1,2,3))
-    cardinality=torch.sum(reconstruction+batch,dim=(1,2,3))
-
-    dice_score=2.*intersection/cardinality
-    return torch.mean(1.-dice_score)
-
-  def get_contributes(self,reconstruction,batch):
-    contributes={}
-    contributes["GDLoss"]=self.GDLoss(reconstruction,batch).item()
-    contributes["MSELoss"]=self.MSELoss(reconstruction,batch).item()
-    contributes["Total"]=contributes["GDLoss"]+contributes["MSELoss"]
-    return contributes
-
-  def __call__(self,reconstruction,batch,epoch):
-    loss=self.MSELoss(reconstruction,batch) + self.GDLoss(reconstruction,batch)
-    if(epoch<10):
-      loss+=self.GDLoss(reconstruction[:,1:],batch[:,1:])
-    return loss
-
 class AE(nn.Module):
   def __init__(self, latent_size=100):
     super().__init__()
     self.init_layers(latent_size)
     self.apply(self.weight_init)
-    self.loss_function = Losses()
+    self.loss_function=self.Loss()
+    self.metrics=self.Metrics()
+    self.optimizer=torch.optim.Adam(self.parameters(),lr=2e-4,weight_decay=1e-5)
 
   def init_layers(self,latent_size):
     self.encoder = nn.Sequential(
@@ -83,7 +61,7 @@ class AE(nn.Module):
       nn.LeakyReLU(.2),
       nn.Dropout(0.5),
 
-      nn.Conv2d(in_channels=32,out_channels=latent_size,kernel_size=4,stride=2,padding=1)#4,2,1
+      nn.Conv2d(in_channels=32,out_channels=latent_size,kernel_size=4,stride=2,padding=1)
     )
 
     self.decoder = nn.Sequential(
@@ -145,48 +123,123 @@ class AE(nn.Module):
     reconstruction = self.decoder(latent)
     return reconstruction
 
-  def evaluation_routine(self, val_loader):
-    epoch_loss={}
-    batch_losses={}
-    for [batch] in val_loader:
-      batch=batch.to(device)
-      reconstruction=self.forward(batch)
-      for k,v in self.loss_function.get_contributes(reconstruction,batch).items():
-        if k not in batch_losses.keys():
-          batch_losses[k]=[]
-        batch_losses[k].append(v)
-    for k in batch_losses.keys():
-      epoch_loss[k] = sum(batch_losses[k])/len(batch_losses[k])
-    return epoch_loss
+  class Loss():
+    def __init__(self,call_id=0):
+      self.MSELoss=nn.MSELoss()
+      self.GDLoss=self.GDLoss()
+      
+    class GDLoss:
+      def __call__(self,prediction,target):
+        intersection=torch.sum(prediction*target,dim=(1,2,3))
+        cardinality=torch.sum(prediction+target,dim=(1,2,3))
+        dice_score=2.*intersection/(cardinality+1e-6)
+        return torch.mean(1-dice_score)
 
-  def epoch_end(self, epoch, result):
-    output="Epoch [{}], ".format(epoch)
-    for k,v in result.items():
-      output+="{}: {:.4f} ".format(k,v)
-    print(output)
+    def __call__(self,prediction,target,epoch=None,validation=False):
+      contributes={}
+      contributes["MSELoss"]=self.MSELoss(prediction,target)
+      contributes["GDLoss"]=self.GDLoss(prediction,target)
+      contributes["Total"]=contributes["MSELoss"]+contributes["GDLoss"]
+      if(epoch is not None and epoch<10):
+        contributes["Total"]+=self.GDLoss(prediction[:,1:],target[:,1:])
+      if validation:
+        return {k:v.item() for k,v in contributes.items()}
+      return contributes["Total"]
 
-  def training_routine(self, epochs, train_loader, val_loader):
+  class Metrics():
+    def __init__(self):
+      self.DC=self.DC()
+      self.HD=self.HD()
+
+    class DC:
+      def __call__(self,prediction,target):
+        try:
+          return binary.dc(prediction,target)
+        except Exception:
+          return 0
+
+    class HD:
+      def __call__(self,prediction,target):
+        try:
+          return binary.hd(prediction,target)
+        except Exception:
+          return np.nan
+
+    def __call__(self,prediction,target,validation=False):
+      metrics={}
+      for c,key in enumerate(["BK_","RV_","MYO_","LV_"]):
+        ref=np.copy(target)
+        pred=np.copy(prediction)
+
+        ref=np.where(ref!=c,0,1)
+        pred=np.where(pred!=c,0,1)
+        
+        metrics[key+"dc"]=self.DC(pred,ref)
+        metrics[key+"hd"]=self.HD(pred,ref)
+      return metrics
+
+  def training_routine(self,epochs,train_loader,val_loader,ckpt_folder):
+    if not os.path.isdir(ckpt_folder):
+      os.mkdir(ckpt_folder)
     history = []
-    optimizer = torch.optim.Adam(self.parameters(),lr=2e-4,weight_decay=1e-5)
     best_acc = None
-    for epoch in range(epochs):
+    for epoch in epochs:
+      #training
       self.train()
-      for [batch] in train_loader:
+      for patient in train_loader:
+        for batch in patient:
           batch=batch.to(device)
-          optimizer.zero_grad()
+          self.optimizer.zero_grad()
           reconstruction=self.forward(batch)
           loss=self.loss_function(reconstruction,batch,epoch)
           loss.backward()
-          optimizer.step()
+          self.optimizer.step()
+      #validation
       self.eval()
-      result = self.evaluation_routine(val_loader)
-      if(best_acc==None or result['Total']<best_acc):
-        best_acc=result['Total']
-        torch.save(self,"best_ae.pth")
+      with torch.no_grad():
+        result = self.evaluation_routine(val_loader)
+      #checkpoint
+      if(best_acc==None or result['Total']<best_acc or epoch%10==0):
+        ckpt=os.path.join(ckpt_folder,"{:03d}.pth".format(epoch))
+        if(best_acc==None or result['Total']<best_acc): best_acc=result['Total']; ckpt=ckpt.split(".pth")[0]+"_best.pth"
+        torch.save({"AE": self.state_dict(),"AE_optim": self.optimizer.state_dict(),"epoch": epoch},ckpt)
+      #report
       self.epoch_end(epoch, result)
       history.append(result)
     return history
 
+  def evaluation_routine(self,val_loader):
+    epoch_summary={}
+    for patient in val_loader:
+      gt=[];reconstruction=[]
+      #loss terms
+      for batch in patient:
+        batch={"gt":batch.to(device)}
+        batch["reconstruction"]=ae.forward(batch["gt"])
+        gt=torch.cat([gt,batch["gt"]],dim=0) if len(gt)>0 else batch["gt"]
+        reconstruction=torch.cat([reconstruction,batch["reconstruction"]],dim=0) if len(reconstruction)>0 else batch["reconstruction"]
+        for k,v in self.loss_function(batch["reconstruction"],batch["gt"],validation=True).items():
+          if k not in epoch_summary.keys(): epoch_summary[k]=[]
+          epoch_summary[k].append(v)
+      #validation metrics
+      gt=np.argmax(gt.cpu().numpy(),axis=1)
+      gt={"ED":gt[:len(gt)//2],"ES":gt[len(gt)//2:]}
+      reconstruction=np.argmax(reconstruction.cpu().numpy(),axis=1)
+      reconstruction={"ED":reconstruction[:len(reconstruction)//2],"ES":reconstruction[len(reconstruction)//2:]}
+      for phase in ["ED","ES"]:
+        for k,v in self.metrics(reconstruction[phase],gt[phase]).items():
+          if k not in epoch_summary.keys(): epoch_summary[k]=[]
+          epoch_summary[k].append(v)
+    epoch_summary={k:np.mean(v) for k,v in epoch_summary.items()}
+    return epoch_summary
+
+  def epoch_end(self,epoch,result):
+    print("\033[1mEpoch [{}]\033[0m".format(epoch))
+    header,row="",""
+    for k,v in result.items():
+      header+="{:.6}\t".format(k);row+="{:.6}\t".format("{:.4f}".format(v))
+    print(header);print(row)
+    
 def plot_history(history):
   losses = [x['Total'] for x in history]
   plt.plot(losses, '-x', label="loss")
