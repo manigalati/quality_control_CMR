@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
+from medpy.metric import binary
+
 #use gpu if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
