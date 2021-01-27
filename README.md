@@ -25,7 +25,7 @@ We demonstrate its effectiveness by reproducing the results of the [ACDC Challen
 
 ## Copyright and licensing
 
-Copyright 2020 Eurecom.
+Copyright 2020.
 
 This software is released under the BSD-3 license. Please see the license file_ for details.
 
