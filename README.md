@@ -8,8 +8,9 @@ Authors: Francesco Galati, Maria A. Zuluaga.
 
 If you use this software, please cite the following paper as appropriate:
 
-    Galati, F., Zuluaga, M. A. (2020).
+    Galati, F., Zuluaga, M. A. (2021).
     Efficient model monitoring for quality control in cardiac image segmentation.
+    In: 11th Biennal Conference on Functional Imaging and Modeling of the Heart (FIMH)
 
 ## Requirements
  * PyTorch 1.6.0
