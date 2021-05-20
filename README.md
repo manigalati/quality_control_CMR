@@ -1,15 +1,10 @@
 # Efficient model monitoring for quality control in cardiac image segmentation
 
-Scripts and utility programs for implementing our framework.
+Repository for code from the paper "Efficient model monitoring for quality control in cardiac image segmentation". 
 
-Authors: Francesco Galati, Maria A. Zuluaga.
+It contains all the scripts and utility programs for implementing our framework.
 
-## How to cite
-
-If you use this software, please cite the following paper as appropriate:
-
-    Galati, F., Zuluaga, M. A. (2020).
-    Efficient model monitoring for quality control in cardiac image segmentation.
+Authors: Francesco Galati and Maria A. Zuluaga.
 
 ## Requirements
  * PyTorch 1.6.0
@@ -22,6 +17,15 @@ If you use this software, please cite the following paper as appropriate:
 All the python classes and functions strictly needed to implement the framework can be found in `CA.py`.
 
 We demonstrate its effectiveness by reproducing the results of the [ACDC Challenge] in `Model_Monitoring_for_Cardiac_Image_Segmentation.ipynb`, in the absence of ground truth.
+
+## How to cite
+
+If you use this software, please cite the following paper as appropriate:
+
+    Galati, F., Zuluaga, M. A. (2021).
+    Efficient model monitoring for quality control in cardiac image segmentation.
+    In: 11th Biennal Conference on Functional Imaging and Modeling of the Heart (FIMH)
+    https://arxiv.org/abs/2104.05533
 
 ## Copyright and licensing
 
