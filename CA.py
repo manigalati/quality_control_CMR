@@ -133,19 +133,20 @@ class AE(nn.Module):
       self.GDLoss=self.GDLoss()
       
     class GDLoss:
-      def __call__(self,prediction,target):
-        intersection=torch.sum(prediction*target,dim=(1,2,3))
-        cardinality=torch.sum(prediction+target,dim=(1,2,3))
-        dice_score=2.*intersection/(cardinality+1e-6)
-        return torch.mean(1-dice_score)
+      def __call__(self,x,y):
+        tp=torch.sum(x*y,dim=(0,2,3))
+        fp=torch.sum(x*(1-y),dim=(0,2,3))
+        fn=torch.sum((1-x)*y,dim=(0,2,3))
+        nominator=2*tp+1e-05
+        denominator=2*tp+fp+fn+1e-05
+        dice_score=-(nominator/(denominator+1e-8))[1:].mean()
+        return dice_score
 
     def __call__(self,prediction,target,epoch=None,validation=False):
       contributes={}
       contributes["MSELoss"]=self.MSELoss(prediction,target)
       contributes["GDLoss"]=self.GDLoss(prediction,target)
       contributes["Total"]=contributes["MSELoss"]+contributes["GDLoss"]
-      if(epoch is not None and epoch<10):
-        contributes["Total"]+=self.GDLoss(prediction[:,1:],target[:,1:])
       if validation:
         return {k:v.item() for k,v in contributes.items()}
       return contributes["Total"]

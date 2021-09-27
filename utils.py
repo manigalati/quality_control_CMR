@@ -9,8 +9,10 @@ import torchvision
 
 from PIL import Image
 from medpy.metric import binary
-from skimage.transform import resize
 from scipy import stats
+from scipy.ndimage import binary_fill_holes
+from batchgenerators.augmentations.utils import resize_segmentation
+from batchgenerators.augmentations.spatial_transformations import augment_spatial
 
 #use gpu if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,60 +21,62 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ##Data preparation##
 ####################
 
+def crop_image(image):
+  nonzero_mask=binary_fill_holes(image!=0)
+  mask_voxel_coords=np.stack(np.where(nonzero_mask))
+  minidx=np.min(mask_voxel_coords,axis=1)
+  maxidx=np.max(mask_voxel_coords,axis=1)+1
+  resizer = tuple([slice(*i) for i in zip(minidx,maxidx)])
+  return resizer
+
 def generate_patient_info(folder,patient_ids):
   num_patients=sum(os.path.isdir(folder+i) for i in os.listdir(folder))
   patient_info={}
   for id in patient_ids:
     patient_folder=os.path.join(folder,'patient{:03d}'.format(id))
-    nfo=np.loadtxt(os.path.join(patient_folder,"Info.cfg"),dtype=str,delimiter=': ')
-    nfo={k:v for k,v in nfo}
-    patient_info[id]={}
-    patient_info[id]['ED']=int(nfo["ED"])
-    patient_info[id]['ES']=int(nfo["ES"])
+    patient_info[id]={
+      k:v for k,v in np.loadtxt(
+        os.path.join(patient_folder,"Info.cfg"),
+        dtype=str,delimiter=': '
+      )
+    }
+    patient_info[id]["ED"]=int(patient_info[id]["ED"])
+    patient_info[id]["ES"]=int(patient_info[id]["ES"])
+
     image=nib.load(os.path.join(patient_folder,"patient{:03d}_frame{:02d}.nii.gz".format(id,patient_info[id]["ED"])))
-    patient_info[id]['shape_ED']=image.get_fdata().shape
+    patient_info[id]["shape_ED"]=image.get_fdata().shape
+    patient_info[id]["crop_ED"]=crop_image(image.get_fdata())
     image=nib.load(os.path.join(patient_folder,"patient{:03d}_frame{:02d}.nii.gz".format(id,patient_info[id]["ES"])))
-    patient_info[id]['shape_ES']=image.get_fdata().shape   
-    patient_info[id]['spacing']=image.header["pixdim"][[3,2,1]]
-    patient_info[id]['header']=image.header
-    patient_info[id]['affine']=image.affine
+    patient_info[id]["shape_ES"]=image.get_fdata().shape   
+    patient_info[id]["crop_ES"]=crop_image(image.get_fdata())
+    
+    patient_info[id]["spacing"]=image.header["pixdim"][[3,2,1]]
+    patient_info[id]["header"]=image.header
+    patient_info[id]["affine"]=image.affine
   return patient_info
   
-def preprocess_image(nib_image,spacing,spacing_target=[10,1.25,1.25]):
+def preprocess_image(image,crop,spacing,spacing_target):
+  image=image[crop].transpose(2,1,0)
   spacing_target[0]=spacing[0]
-  image=nib_image.get_fdata().transpose(2,1,0)
   new_shape=np.round(spacing/spacing_target*image.shape).astype(int)
-  tmp=np.eye(len(np.unique(image)))[image.astype(int)].transpose(3,0,1,2)
-  vals=np.unique(image)
-  results=[]
-  for i in range(len(tmp)):
-    results.append(resize(tmp[i],new_shape,order=1,mode='edge'))
-  image = vals[np.stack(results).argmax(0)]
+  image=resize_segmentation(image,new_shape,order=1)
   return image
-  
-def preprocess_training(patient_info,folder,folder_out,patient_ids):
+
+def preprocess(patient_ids,patient_info,spacing_target,folder,folder_out,get_patient_folder,get_fname):
   for id in patient_ids:
-    patient_folder=os.path.join(folder,'patient{:03d}'.format(id))
+    patient_folder=get_patient_folder(folder, id)
     images=[]
     for phase in ["ED","ES"]:
-      fname="patient{:03d}_frame{:02d}_gt.nii.gz".format(id,patient_info[id][phase])
+      fname=get_fname(patient_info, id, phase)
       fname=os.path.join(patient_folder,fname)
       if(not os.path.isfile(fname)):
         continue
-      image=preprocess_image(nib.load(fname),spacing=patient_info[id]["spacing"])
-      images.append(image)
-    images=np.vstack(images)
-    np.save(os.path.join(folder_out,"patient{:03d}".format(id)),images.astype(np.float32))
-
-def preprocess_testing(patient_info,folder,folder_out,patient_ids):
-  for id in patient_ids:
-    images=[]
-    for phase in ["ED","ES"]:
-      fname="patient{:03d}_{}.nii.gz".format(id,phase)
-      fname=os.path.join(folder,fname)
-      if(not os.path.isfile(fname)):
-        continue
-      image=preprocess_image(nib.load(fname),spacing=patient_info[id]["spacing"])
+      image=preprocess_image(
+        nib.load(fname).get_fdata(),
+        patient_info[id]["crop_{}".format(phase)],
+        patient_info[id]["spacing"],
+        spacing_target
+      )
       images.append(image)
     images=np.vstack(images)
     np.save(os.path.join(folder_out,"patient{:03d}".format(id)),images.astype(np.float32))
@@ -138,6 +142,30 @@ class ToTensor(object):
   def __call__(self, sample):
     sample=torch.from_numpy(sample).float()
     return sample
+
+class MirrorTransform():
+  def __call__(self,sample):
+    if np.random.uniform() < 0.5:
+      sample = np.copy(sample[::-1])
+    if np.random.uniform() < 0.5:
+      sample = np.copy(sample[:, ::-1])
+    return sample
+
+class SpatialTransform():
+  def __init__(self, patch_size,do_elastic_deform=False, alpha=None, sigma=None,
+    do_rotation=True, angle_x=(-np.pi/6,np.pi/6), angle_y=None, angle_z=None,
+    do_scale=True, scale=(0.7, 1.4), border_mode_data='constant', border_cval_data=0, order_data=3,
+    border_mode_seg='constant', border_cval_seg=0, order_seg=0, random_crop=True, p_el_per_sample=1,
+    p_scale_per_sample=1, p_rot_per_sample=1,independent_scale_for_each_axis=False, p_rot_per_axis:float=1,
+    p_independent_scale_per_axis: int=1):
+    self.params=locals()
+    self.params.pop("self")
+    self.params["patch_center_dist_from_border"]=list(np.array(patch_size)//2)
+
+  def __call__(self, sample):
+    sample=sample[None,None,:,:]
+    _,sample = augment_spatial(sample,sample,**self.params) 
+    return sample[0,0]
     
 class ACDCPatient(torch.utils.data.Dataset):
   def __init__(self,root_dir,patient_id,transform=None):
@@ -211,18 +239,23 @@ def evaluate_metrics(prediction,reference):
       results["HD"+key]=np.nan
   return results
 
-def postprocess_image(image,shape_target,spacing_target,spacing=[10,1.25,1.25]):
-  tmp_shape=tuple(np.round(spacing_target[1:]/spacing[1:]*shape_target[:2]).astype(int)[::-1])
+def postprocess_image(image,info,phase,current_spacing):
+  postprocessed=np.zeros(info["shape_{}".format(phase)])
+  crop=info["crop_{}".format(phase)]
+  original_shape=postprocessed[crop].shape
+  original_spacing=info["spacing"]
+  tmp_shape=tuple(np.round(original_spacing[1:]/current_spacing[1:]*original_shape[:2]).astype(int)[::-1])
   image=np.argmax(image,axis=1)
   image=np.array([torchvision.transforms.Compose([
       AddPadding(tmp_shape),CenterCrop(tmp_shape),OneHot()
     ])(slice) for slice in image]
   )
-  image=resize(image.transpose(1,3,2,0),image.shape[1:2]+shape_target,order=3,mode="constant",cval=0,clip=True)
+  image=resize_segmentation(image.transpose(1,3,2,0),image.shape[1:2]+original_shape,order=1)
   image=np.argmax(image,axis=0)
-  return image
+  postprocessed[crop]=image
+  return postprocessed
   
-def testing(ae,test_loader,patient_info,folder_predictions,folder_out):
+def testing(ae,test_loader,patient_info,folder_predictions,folder_out,current_spacing):
   ae.eval()
   with torch.no_grad():
     results={"ED":{},"ES":{}}
@@ -238,7 +271,7 @@ def testing(ae,test_loader,patient_info,folder_predictions,folder_out):
       reconstruction={"ED":reconstruction[:len(reconstruction)//2].cpu().numpy(),"ES":reconstruction[len(reconstruction)//2:].cpu().numpy()}
 
       for phase in ["ED","ES"]:
-        reconstruction[phase]=postprocess_image(reconstruction[phase],patient_info[id]["shape_{}".format(phase)],patient_info[id]["spacing"])
+        reconstruction[phase]=postprocess_image(reconstruction[phase],patient_info[id],phase,current_spacing)
         results[phase]["patient{:03d}".format(id)]=evaluate_metrics(
             nib.load(os.path.join(folder_predictions,"patient{:03d}_{}.nii.gz".format(id,phase))).get_fdata(),
             reconstruction[phase]
