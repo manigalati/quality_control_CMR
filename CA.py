@@ -233,7 +233,7 @@ class AE(nn.Module):
                     
             self.eval()
             with torch.no_grad():
-                result = self.evaluation_routine(val_loader)
+                result = self.evaluation_routine(val_loader, epoch)
             
             if ckpt_folder is not None and (best_acc is None or result['Total'] < best_acc or epoch%10 == 0):
                 ckpt = os.path.join(ckpt_folder,"{:03d}.pth".format(epoch))
@@ -246,7 +246,7 @@ class AE(nn.Module):
             history.append(result)
         return history
 
-    def evaluation_routine(self, val_loader):
+    def evaluation_routine(self, val_loader, epoch):
         epoch_summary = {}
         for patient in val_loader:
             gt, reconstruction = [], []
@@ -255,7 +255,7 @@ class AE(nn.Module):
                 batch["reconstruction"] = self.forward(batch["gt"])
                 gt = torch.cat([gt, batch["gt"]], dim=0) if len(gt) > 0 else batch["gt"]
                 reconstruction = torch.cat([reconstruction, batch["reconstruction"]], dim=0) if len(reconstruction) > 0 else batch["reconstruction"]
-                for k,v in self.loss_function(batch["reconstruction"],batch["gt"],validation=True).items():
+                for k,v in self.loss_function(batch["reconstruction"], batch["gt"], epoch, validation=True).items():
                     if k not in epoch_summary.keys():
                         epoch_summary[k]=[]
                     epoch_summary[k].append(v)
