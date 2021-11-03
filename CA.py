@@ -170,18 +170,18 @@ class AE(nn.Module):
                 dice_score =- (nominator / (denominator+1e-6))[1:].mean()
                 return dice_score
 
-    def __call__(self, prediction, target, epoch, validation=False):
-        contributes = {f: self.__dict__[f](prediction, target) for f in self.functions}
-        if epoch < self.settling_epochs:
-            if "BKMSELoss" in contributes:
-                contributes["BKMSELoss"] = self.BKMSELoss(prediction[:,1:], target[:,1:])#TODO: like this impossible old configuration
-            if "BKGDLoss" in contributes:
-                contributes["BKGDLoss"] = self.BKGDLoss(prediction[:,1:], target[:,1:])
-        contributes["Total"] = sum(contributes.values())
-        if validation:
-            return {k: v.item() for k,v in contributes.items()}
-        else:
-            return contributes["Total"]
+        def __call__(self, prediction, target, epoch, validation=False):
+            contributes = {f: self.__dict__[f](prediction, target) for f in self.functions}
+            if epoch < self.settling_epochs:
+                if "BKMSELoss" in contributes:
+                    contributes["BKMSELoss"] = self.BKMSELoss(prediction[:,1:], target[:,1:])#TODO: like this impossible old configuration
+                if "BKGDLoss" in contributes:
+                    contributes["BKGDLoss"] = self.BKGDLoss(prediction[:,1:], target[:,1:])
+            contributes["Total"] = sum(contributes.values())
+            if validation:
+                return {k: v.item() for k,v in contributes.items()}
+            else:
+                return contributes["Total"]
 
     class Metrics():
         def __init__(self):
@@ -324,7 +324,7 @@ def satisfies_rules(rules, set_parameters):
 
 
 
-def hyperparameter_tuning(parameters,train_path,train_ids,val_ids,rules=[],fast=False):
+def hyperparameter_tuning(parameters, train_loader, val_loader, transform, transform_augmentation, rules=[], fast=False):
     best_dc = 0
     optimal_parameters = None
     for set_parameters in get_sets(parameters):
@@ -334,12 +334,17 @@ def hyperparameter_tuning(parameters,train_path,train_ids,val_ids,rules=[],fast=
 
         BATCH_SIZE = set_parameters["BATCH_SIZE"]
         DA = set_parameters["DA"]
+        train_loader.set_batch_size(BATCH_SIZE)
+        val_loader.set_batch_size(BATCH_SIZE)
+        train_loader.set_transform(transform_augmentation if DA else transform)
+        val_loader.set_transform(transform)
+
         ae = AE(**set_parameters).to(device)
         
         history = ae.training_routine(
             range(0,set_parameters["tuning_epochs"]),
-            ACDCDataLoader(train_path,patient_ids=train_ids,batch_size=BATCH_SIZE,transform=transform_augmentation if DA else transform),
-            ACDCDataLoader(train_path,patient_ids=val_ids,batch_size=BATCH_SIZE,transform=transform)
+            train_loader,
+            val_loader
         )
         history = {k:[x[k] for x in history] for k in history[0].keys() if k in ["LV_dc", "MYO_dc", "RV_dc"]}
         history = pd.DataFrame.from_dict(history)

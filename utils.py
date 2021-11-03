@@ -186,16 +186,32 @@ class ACDCPatient(torch.utils.data.Dataset):
         return sample
 
 class ACDCDataLoader():
-    def __init__(self, root_dir, patient_ids, batch_size, transform=None):
+    def __init__(self, root_dir, patient_ids, batch_size=None, transform=None):
+        self.root_dir = root_dir
         self.patient_ids = patient_ids
         self.batch_size = batch_size
+        self.transform = transform
         self.patient_loaders = []
-        for id in patient_ids:
+        if batch_size is not None:
+            for id in self.patient_ids:
+                self.patient_loaders.append(torch.utils.data.DataLoader(
+                    ACDCPatient(root_dir, id, transform=transform),
+                    batch_size=batch_size, shuffle=False, num_workers=0
+                ))
+        self.counter_id = 0
+    
+    def set_batch_size(self, batch_size):
+        self.patient_loaders = []
+        for id in self.patient_ids:
             self.patient_loaders.append(torch.utils.data.DataLoader(
-                ACDCPatient(root_dir, id, transform=transform),
+                ACDCPatient(self.root_dir, id, transform=self.transform),
                 batch_size=batch_size, shuffle=False, num_workers=0
             ))
-        self.counter_id = 0
+    
+    def set_transform(self, transform):
+        self.transform = transform
+        for loader in self.patient_loaders:
+            loader.dataset.transform = transform
 
     def __iter__(self):
         self.counter_iter = 0
