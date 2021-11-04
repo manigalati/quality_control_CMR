@@ -16,7 +16,7 @@ Authors: Francesco Galati and Maria A. Zuluaga.
 
 All the python classes and functions strictly needed to implement the framework can be found in `CA.py`.
 
-We demonstrate its effectiveness by reproducing the results of the [ACDC Challenge] in `QC.ipynb`, in the absence of ground truth (check also `QC_wDataAugmentation.ipynb` for a more robust implementation with the use of data augmentation techniques).
+We demonstrate its effectiveness by reproducing the results of the [ACDC Challenge] in `QC.ipynb`, in the absence of ground truth. Inside the notebook you can also find an automatic procedure to tune hyperparameters in case ours do not adapt to your data. 
 
 ## How to cite
 
