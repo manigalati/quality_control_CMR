@@ -174,9 +174,9 @@ class AE(nn.Module):
             contributes = {f: self.__dict__[f](prediction, target) for f in self.functions}
             if epoch < self.settling_epochs:
                 if "BKMSELoss" in contributes:
-                    contributes["BKMSELoss"] = self.BKMSELoss(prediction[:,1:], target[:,1:])#TODO: like this impossible old configuration
+                    contributes["BKMSELoss"] += self.BKMSELoss(prediction[:,1:], target[:,1:])
                 if "BKGDLoss" in contributes:
-                    contributes["BKGDLoss"] = self.BKGDLoss(prediction[:,1:], target[:,1:])
+                    contributes["BKGDLoss"] += self.BKGDLoss(prediction[:,1:], target[:,1:])
             contributes["Total"] = sum(contributes.values())
             if validation:
                 return {k: v.item() for k,v in contributes.items()}
