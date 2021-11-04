@@ -145,13 +145,13 @@ class AE(nn.Module):
             def __init__(self):
                 self.MSELoss = nn.MSELoss()
             def __call__(self, prediction, target):
-                return self.MSELoss(prediction[:,1:], target[:,1:])
+                return self.MSELoss(prediction, target)
 
         class MSELoss:
             def __init__(self):
                 self.MSELoss = nn.MSELoss()
             def __call__(self, prediction, target):
-                return self.MSELoss(prediction, target)
+                return self.MSELoss(prediction[:,1:], target[:,1:])
 
         class BKGDLoss:
             def __call__(self, prediction, target):
