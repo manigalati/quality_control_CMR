@@ -15,7 +15,7 @@ class AE(nn.Module):
         super().__init__()
         self.init_layers(kwargs["latent_size"])
         self.apply(self.weight_init)
-        self.loss_function = self.Loss(kwargs["functions"], kwargs["settling_epochs"])
+        self.loss_function = self.Loss(kwargs["functions"], kwargs["settling_epochs_BKGDLoss"], kwargs["settling_epochs_BKMSELoss"])
         self.metrics = self.Metrics()
         self.optimizer = kwargs["optimizer"](
             self.parameters(),
@@ -133,13 +133,14 @@ class AE(nn.Module):
         return reconstruction
 
     class Loss():
-        def __init__(self, functions, settling_epochs):
+        def __init__(self, functions, settling_epochs_BKGDLoss, settling_epochs_BKMSELoss):
             self.MSELoss = self.MSELoss()
             self.BKMSELoss = self.BKMSELoss()
             self.BKGDLoss = self.BKGDLoss()
             self.GDLoss = self.GDLoss()
             self.functions = functions
-            self.settling_epochs = settling_epochs
+            self.settling_epochs_BKGDLoss = settling_epochs_BKGDLoss
+            self.settling_epochs_BKMSELoss = settling_epochs_BKMSELoss
 
         class BKMSELoss:
             def __init__(self):
@@ -172,11 +173,10 @@ class AE(nn.Module):
 
         def __call__(self, prediction, target, epoch, validation=False):
             contributes = {f: self.__dict__[f](prediction, target) for f in self.functions}
-            if epoch < self.settling_epochs:
-                if "BKMSELoss" in contributes:
-                    contributes["BKMSELoss"] += self.BKMSELoss(prediction[:,1:], target[:,1:])
-                if "BKGDLoss" in contributes:
-                    contributes["BKGDLoss"] += self.BKGDLoss(prediction[:,1:], target[:,1:])
+            if "BKGDLoss" in contributes and epoch < self.settling_epochs_BKGDLoss:
+                contributes["BKGDLoss"] += self.BKGDLoss(prediction[:,1:], target[:,1:])
+            if "BKMSELoss" in contributes and epoch < self.settling_epochs_BKMSELoss:
+                contributes["BKMSELoss"] += self.BKMSELoss(prediction[:,1:], target[:,1:])
             contributes["Total"] = sum(contributes.values())
             if validation:
                 return {k: v.item() for k,v in contributes.items()}
